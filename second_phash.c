@@ -4,5 +4,5 @@ i have the label_list and if it not there it is extern and the line will be 0x00
 */
 /*first trim the line then check what is the command 
 then check how many register we will use in it
-thee check for num of register per command will be chacked in the parser (cant put register in bne or jmp) */
+thee check for num of register per command will be checked in the parser (cant put register in bne or jmp etc.) */
 

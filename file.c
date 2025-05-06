@@ -15,9 +15,16 @@ int error = 0;
 /*–– Global macro list and count ––*/
 static char ***mcro_list = NULL;  /* mcro_list[i] is a char** (array of lines), with [0] == label */
 static size_t mcro_count = 0;     /* number of macros defined */
+static size_t label_count = 0;
+static size_t unknown_count = 0;
+static size_t entry_count = 0;
+static size_t extern_count = 0;
 static char ***entry_list =  NULL;
 static char ***extern_list = NULL;
-static char ***label_list = NULL; 
+static char ***label_list = NULL;
+static char ***unknown_list = NULL; 
+static FILE* first_pass_file = NULL;
+
 /*–– Helper to trim left/right in place ––*/
 static void trim(char *s) {
     char *p = s;
@@ -45,7 +52,7 @@ void parser(FILE* file) {
                 add_line_to_mcro(line, current_mcro);
             }
         }
-        else if (is_mcro_def(line, current_mcro)) {
+        else if (is_mcro_def(line)) {
             in_mcro = 1;
             add_mcro(current_mcro, file);
         }
@@ -76,7 +83,12 @@ void parser(FILE* file) {
 
     }
 
-    /* clean up macro storage if you like */
+/* at the end of the preproceeing if we had a line like mov r3, L and we dont know what L is we would save it in the ***uknown and then   
+we will look in the extern and labels if we dont see it there we will throw error and the program won't go to phash 2*/
+/*code will be here*/
+
+
+    /* clean up macro storage*/
     for (size_t i = 0; i < mcro_count; i++) {
         char **body = mcro_list[i];
         for (size_t j = 0; body[j] != NULL; j++) {
@@ -98,19 +110,17 @@ int is_entry(const char* line) {
     return strncmp(line, ENTRY, strlen(ENTRY)) == 0;
 }
 int is_label(const char* line) {
-    size_t n = strlen(line);
-    return (n > 0 && (strchr(':',line) != NULL));
+    char* label = strchr(line,':');
+    if (label == NULL)
+     return 0;
+    return (lable - line < 32 && label - line > 0);
 }
 int is_instruction(const char* line) {
     
     return 0;
 }
 int is_mcro_def(const char* line, char out_name[32]) {
-    size_t kw = strlen(MCRO);
-    if (strncmp(line, MCRO, kw) != 0) return 0;
-    strncpy(out_name, line + kw, 31);
-    out_name[31] = '\0';
-    return 1;
+    return strncmp(line, MCRO, strlen(MCRO)) == 0;
 }
 size_t is_macro_call(const char* line) {
     for (size_t i = 0; i < mcro_count; i++) {
@@ -122,25 +132,63 @@ size_t is_macro_call(const char* line) {
 }
 
 /*–– Macro‐management ––*/
-void add_mcro(const char* label, FILE* file) {
+void add_mcro(const char* line, FILE* file) {
+	char* copy_line  = strdup(line);
+    char label_line[81];
+	int n = 0;
+	strcpy(label_line,copy_line+strlen(MCRO));
+    free(copy_line);
+    copy_line = NULL;
+	trim(label_line);
+	if(!isalpha(label_line[n])){
+	    error = 1;
+	    printf("[-] Erorr: the first letter of a label %s should be alphabatic",line);
+	 
+        return;
+	}
+	for(n = 1;n < 32;n++)
+	{
+        /*not number maybe a ' ' or diffrent char and will send an error in the next line*/
+	    if(!isalnum(label_line[n]))
+		    break;
+	}
+	for(;n < strlen(label_line);n++)
+	{
+        /* we starting a comment so we dont care if the code have some data at the end of the line if it's in a comment*/
+            if(label_line[n] == ';')
+            {
+                break;
+            } 
+            /*data that's not in a comment */
+            else if(label_line[n] != ' ')
+            {
+                printf("[-] Error: should have nothing in the same line in the entry line only the label and comments");
+                consume_mcro(file);
+	       
+                return;
+      		}
+    }
     /* check duplicate */
-	size_t i;
+    size_t i;
     for (i = 0; i < mcro_count; i++) {
         if (strcmp(mcro_list[i][0], label) == 0) {
             printf("[-] Error: mcro label name `%s` is already taken\n", label);
             consume_mcro(file);
             error = 1;
+           
             return;
         }
     }
-    for(i = 0;i<label_count;i++)
+    for(i = 0;i < label_count;i++)
     {
 	    if (strcmp(label_list[i][0], label) == 0) {
             printf("[-] Error: mcro label name `%s` is already taken\n", label);
             consume_mcro(file);
             error = 1;
+           
             return;
     
+     }
     }
     /* new macro header + terminator slot */
     char **new_m = malloc(2 * sizeof *new_m);
@@ -153,9 +201,11 @@ void add_mcro(const char* label, FILE* file) {
     mcro_list = realloc(mcro_list, mcro_count * sizeof *mcro_list);
     if (!mcro_list) { perror("realloc"); exit(EXIT_FAILURE); }
     mcro_list[mcro_count - 1] = new_m;
+  
 }
 
 void add_line_to_mcro(const char* line, const char* current_mcro) {
+    
     /* find the right macro */
     size_t idx = (size_t)-1;
     for (size_t i = 0; i < mcro_count; i++) {
@@ -185,27 +235,48 @@ void handle_extern(const char *line)
 {
  	char* copy_line = strdup(line);
 	char label_line[81];
-	int n;
-	strcpy(label_line,copy_line+strlen(EXTERN));
+	int n = 0;
+
+	strncpy(label_line,copy_line+strlen(EXTERN),strlen(label_line));
+    free(copy_line);
+    copy_line = NULL;
 	trim(label_line);
-	if(!isalpha(label_line[0])){
+	if(!isalpha(label_line[n])){
 	    error = 1;
 	    printf("[-] Erorr: the first letter of a label %s should be alphabatic",line);
-	    return;
+	  
+        return;
 	}
-	for(;n < 32;n++)
+	for(n = 1;n < 32;n++)
 	{
 	    if(!isalnum(label_line[n]))
 		    break;
 	}
 	for(;n < strlen(label_line);n++)
 	{
-                if(label_line[n] != ' ' ||  label_line[n] != ';')
-                {
-               		printf("[-] Error: should have nothing in the same line in the entry line only the label and comments")
-			return;
+        /* we starting a comment so we dont care if the code have some data at the end of the line if it's in a comment*/
+            if(label_line[n] == ';')
+            {
+                break;
+            } 
+            /*data that's not in a comment */
+            else if(label_line[n] != ' ')
+            {
+                printf("[-] Error: should have nothing in the same line in the entry line only the label and comments")
+	        
+                return;
       		}
+    }
+    /*check if we already did .extren for that label*/
+    size_t i;
+    for (i = 0; i < ; i++) {
+        if (strcmp(extern_list[i][0], label_line) == 0) {
+            printf("[-] Error: did extern twice for label %s", label_line);
+            error = 1;
+           
+            return;
         }
+    }
     /* new macro header + terminator slot */
     char **new_m = malloc(2 * sizeof *new_m);
     if (!new_m) { perror("malloc"); exit(EXIT_FAILURE); }
@@ -213,11 +284,11 @@ void handle_extern(const char *line)
     new_m[1] = NULL;
 
     /* append to mcro_list */
-    mcro_count++;
-    mcro_list = realloc(mcro_list, mcro_count * sizeof *mcro_list);
-    if (!mcro_list) { perror("realloc"); exit(EXIT_FAILURE); }
-    mcro_list[mcro_count - 1] = new_m;
-	
+    extern_count++;
+    extern_list = realloc(extern_list, extern_count * sizeof *extern_list);
+    if (!extern_list) { perror("realloc"); exit(EXIT_FAILURE); }
+    extern_list[extern_count - 1] = new_m;
+
 
 
  /*…*/
@@ -227,12 +298,17 @@ void handle_entry(const char *line)
 	char* copy_line = strdup(line);
 	char label_line[81];
 	int n;
-	strcpy(label_line,copy_line+strlen(ENTRY));
+    /*could use strcpy since the line is char[81] and by adding 6 to it's pointer we have a string with 74 chars
+    but wanted to have good code practice */
+	strncpy(label_line,copy_line+strlen(ENTRY),strlen(label_line));
+    free(copy_line);
+    copy_line = NULL;
 	trim(label_line);
 	if(!isalpha(label_line[0])){
 	    error = 1;
 	    printf("[-] Erorr: the first letter of a label %s should be alphabatic",line);
-	    return;
+	  
+        return;
 	}
 	for(;n < 32;n++)
 	{
@@ -243,13 +319,14 @@ void handle_entry(const char *line)
 	for(;n <strlen(lable_line) ;n++)
 	{
 	        if(label_line[n] != ' ' ||  label_line[n] != ';')
-                {
+            {
                		printf("[-] Error: should have nothing in the same line in the entry line only the label and comments");
-			return;
-                }
+			        
+                    return;
+            }
       	}
 	/*finish this code*/
-	free(copy_line);
+
 
 	/*…*/
 }
@@ -257,11 +334,14 @@ void handle_label(const char *line, unsigned int *IC)
 {
 	int n = 0;
 	char* copy_line = strdup(line);
+
 	char* instruction = NULL;
         if(!isalpha(copy_line[0])){
 	    error = 1;
 	    printf("[-] Erorr: the first letter of a label %s should be alphabatic",line);
-	    return;
+	    free(copy_line);
+        copy_line = NULL;
+        return;
     }
 
     for(;n < 32;n++)
@@ -271,7 +351,9 @@ void handle_label(const char *line, unsigned int *IC)
     }
     if(copy_line[n] != ':'){
 	    printf("[-] line %d Error: the ':' should be next to the last letter of the label\n%s",IC - 100 , line);
-	    return;
+	    free(copy_line);
+        copy_line = NULL;
+        return;
     }
     instruction = strdup(copy_line+n);
     handle_instruction(instruction,IC);
@@ -279,9 +361,9 @@ void handle_label(const char *line, unsigned int *IC)
     copy_line = NULL:
 }
 void handle_instruction(const char *line, unsigned int *IC) { (*IC)++; }
-void handle_mcro(size_t index, unsigned int *IC)          { /*…*/ }
+void handle_mcro(size_t index, unsigned int *IC){ /*…*/ }
 
-/*–– the function is used when we get an error for an already used ––*/
+/*–– the function is used when we get an error for an already used or any error relate for a mcro ––*/
 void consume_mcro(FILE *file) {
     char buf[81];
     while (fgets(buf, sizeof buf, file)) {
@@ -289,3 +371,6 @@ void consume_mcro(FILE *file) {
         if (mcroend(buf)) break;
     }
 }
+void add_extern_location(*IC,const char* extern_label);
+void add_entry_loction();
+
