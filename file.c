@@ -1,14 +1,15 @@
 /* parser.c */
+#define _POSIX_C_SOURCE 200809L
 #include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include<ctype.h>
 #define EXTERN   ".extern"
 #define ENTRY    ".entry"
 #define MCRO     "mcro "
 #define MCROEND  "mcroend"
-
+#define MAX_LINE 82
 /* error flag */
 int error = 0;
 
@@ -39,11 +40,11 @@ static void trim(char *s) {
 void parser(FILE* file) {
     unsigned int IC = 100;
     unsigned char in_mcro = 0;
-    char line[81];
+    char line[MAX_LINE];
     char current_mcro[32];
     size_t mcro_idx;
 
-    while (fgets(line, sizeof(line), file)) {
+    while (fgets(line, MAX_LINE, file)) {
         trim(line);
         if (in_mcro) {
             if (mcroend(line)) {
@@ -113,13 +114,20 @@ int is_label(const char* line) {
     char* label = strchr(line,':');
     if (label == NULL)
      return 0;
-    return (lable - line < 32 && label - line > 0);
+    return (label - line < 32 && label - line > 0);
 }
 int is_instruction(const char* line) {
-    
-    return 0;
+	int i;
+	int length = 4;
+	char[5] instruction;
+	for(i = 0;i<length;i++) 
+		if
+	for(i =0;i< NUM_OF_INSTRUCTIONS;i++)
+		if(strcmp(list_of_instructions[i],instructions);
+				return i;
+        return 0;
 }
-int is_mcro_def(const char* line, char out_name[32]) {
+int is_mcro_def(const char* line) {
     return strncmp(line, MCRO, strlen(MCRO)) == 0;
 }
 size_t is_macro_call(const char* line) {
@@ -133,10 +141,10 @@ size_t is_macro_call(const char* line) {
 
 /*–– Macro‐management ––*/
 void add_mcro(const char* line, FILE* file) {
-	char* copy_line  = strdup(line);
+    char* copy_line  = strdup(line);
     char label_line[81];
-	int n = 0;
-	strcpy(label_line,copy_line+strlen(MCRO));
+    int n = 0;
+    strcpy(label_line,copy_line+strlen(MCRO));
     free(copy_line);
     copy_line = NULL;
 	trim(label_line);
@@ -152,6 +160,8 @@ void add_mcro(const char* line, FILE* file) {
 	    if(!isalnum(label_line[n]))
 		    break;
 	}
+        char label[32];
+        strncpy(label,label_line,n);
 	for(;n < strlen(label_line);n++)
 	{
         /* we starting a comment so we dont care if the code have some data at the end of the line if it's in a comment*/
@@ -252,6 +262,8 @@ void handle_extern(const char *line)
 	    if(!isalnum(label_line[n]))
 		    break;
 	}
+        char label[32];
+        strncpy(label, label_line,n);
 	for(;n < strlen(label_line);n++)
 	{
         /* we starting a comment so we dont care if the code have some data at the end of the line if it's in a comment*/
@@ -262,14 +274,14 @@ void handle_extern(const char *line)
             /*data that's not in a comment */
             else if(label_line[n] != ' ')
             {
-                printf("[-] Error: should have nothing in the same line in the entry line only the label and comments")
+                printf("[-] Error: should have nothing in the same line in the entry line only the label and comments");
 	        
                 return;
       		}
     }
     /*check if we already did .extren for that label*/
     size_t i;
-    for (i = 0; i < ; i++) {
+    for (i = 0; i <extern_count ; i++) {
         if (strcmp(extern_list[i][0], label_line) == 0) {
             printf("[-] Error: did extern twice for label %s", label_line);
             error = 1;
@@ -316,16 +328,34 @@ void handle_entry(const char *line)
 	    if(!isalnum(label_line[n]))
 		    break;
 	}
-	for(;n <strlen(lable_line) ;n++)
+	for(;n <strlen(label_line) ;n++)
 	{
-	        if(label_line[n] != ' ' ||  label_line[n] != ';')
+		/*a commnet*/
+		if (label_line[n] == ';')
+			break;
+	        if(label_line[n] != ' ')
             {
                		printf("[-] Error: should have nothing in the same line in the entry line only the label and comments");
 			        
                     return;
             }
       	}
+
+	strncpy(label_line,label_line,n);
 	/*finish this code*/
+        char **new_m = malloc(2 * sizeof *new_m);
+        if (!new_m) { perror("malloc"); exit(EXIT_FAILURE); }
+        new_m[0] = strdup(label_line);
+        new_m[1] = NULL;
+
+    /* append to mcro_list */
+    entry_count++;
+    entry_list = realloc(entry_list, entry_count * sizeof *entry_list);
+    if (!entry_list) { perror("realloc"); exit(EXIT_FAILURE); }
+    entry_list[entry_count - 1] = new_m;
+
+
+
 
 
 	/*…*/
@@ -334,33 +364,61 @@ void handle_label(const char *line, unsigned int *IC)
 {
 	int n = 0;
 	char* copy_line = strdup(line);
-
-	char* instruction = NULL;
-        if(!isalpha(copy_line[0])){
+        char label[MAX_LINE];
+	char* instruction = NULL;\
+        strncpy(label,copy_line,MAX_LINE);
+        free(copy_line);
+        copy_line = NULL;
+        trim(label);
+        if(!isalpha(label[0])){
 	    error = 1;
 	    printf("[-] Erorr: the first letter of a label %s should be alphabatic",line);
-	    free(copy_line);
-        copy_line = NULL;
-        return;
+	  return;
     }
 
     for(;n < 32;n++)
     {
-	    if(!isalnum(copy_line[n]))
+	    if(!isalnum(label[n]))
 		    break;
     }
     if(copy_line[n] != ':'){
-	    printf("[-] line %d Error: the ':' should be next to the last letter of the label\n%s",IC - 100 , line);
-	    free(copy_line);
-        copy_line = NULL;
-        return;
+	    printf("[-] line %u Error: the ':' should be next to the last letter of the label\n%s",*IC - 100 , line);
+       return;
     }
-    instruction = strdup(copy_line+n);
+    char **new_m = malloc(2 * sizeof *new_m);
+    if (!new_m) { perror("malloc"); exit(EXIT_FAILURE); }
+    new_m[0] = strndup(label,n);
+    new_m[1] = NULL;
+
+    /* append to mcro_list */
+    label_count++;
+    label_list = realloc(label_list, label_count * sizeof *label_list);
+    if (!extern_list) { perror("realloc"); exit(EXIT_FAILURE); }
+    label_list[label_count - 1] = new_m;
+
+    instruction = strdup(label+n+1);
+    trim(instruction);
     handle_instruction(instruction,IC);
-    free(copy_line);
-    copy_line = NULL:
 }
-void handle_instruction(const char *line, unsigned int *IC) { (*IC)++; }
+void handle_instruction(const char *line, unsigned int *IC) 
+{
+	/*finish this*/
+	int count  = count_register(line);
+	/*should never happen*/
+	if(count == -1)
+	{
+		printf("Error: unknown instruction in line %d",*IC);
+		error = 1;
+	}
+	if(count == 3)
+	{
+		handle_data(line,&IC)
+	}
+	else
+	{
+		
+	}
+}
 void handle_mcro(size_t index, unsigned int *IC){ /*…*/ }
 
 /*–– the function is used when we get an error for an already used or any error relate for a mcro ––*/
@@ -371,6 +429,118 @@ void consume_mcro(FILE *file) {
         if (mcroend(buf)) break;
     }
 }
-void add_extern_location(*IC,const char* extern_label);
+void add_extern_location(int *IC,const char* extern_label);
 void add_entry_loction();
+void handle_data(const char* line, unsigned int *IC )
+{
+	char data[MAX_LINE];
+	int i , count = 0;
+	char* string  = strstr(line,".string"); 
+	if(string != NULL)
+	{
+		
+		strncpy(data,string+strlen(".string"),MAX_LINE);
+		trim(data);
+		if(!(line[0] == '"'))
+		{
+			printf("Error in line %d, .string data type must start with \"",*IC);
+			error=1
+			return;
+		}
+		
+		for(;i< strlen(line);i++)
+		{
+			if(line[i] == '"')
+			{
+				count++;
+				(*IC) += count;
+				return;
+			}
+			else
+			{
+				count++;
+			}
+		}
+		if(line[strlen(line)-1] != '"')
+		{
+			printf("Error in line %d: should have \" at the end of a .string data type",*IC);
+			error = 1;
+			return;
+		}
+	}
 
+	
+	
+	else
+	{
+		char* data_string = strstr(line,".data");
+		strncpy(data,data_string+strlen(".data"),MAX_LINE);
+		trim(data);
+		count = parse_and_count_integers(data);
+		if(count == -1)
+		{
+			printf("In line %d",*IC);
+			error =1;
+			return;
+		}
+		(*IC) += count;
+	}
+
+}
+int parse_and_count_integers(const char *input) {
+    int count = 0;
+    const char *ptr = input;
+    char temp[20];
+
+    while (*ptr) {
+        /* Find end of current number (comma or end of string)*/
+        const char *start = ptr;
+        const char *end = strchr(ptr, ',');
+        if (!end) end = ptr + strlen(ptr);
+
+        /*Copy token to temp buffer*/
+        int len = end - start;
+        if (len == 0 || len >= sizeof(temp)) {
+            printf("Error: Empty or too long number.\n");
+            return -1;
+        }
+        strncpy(temp, start, len);
+        temp[len] = '\0';
+
+        /* Validate token*/
+        char *p = temp;
+        if (*p == '+' || *p == '-') p++;
+        if (!*p) {
+            printf("Error: Sign with no digits in '%s'\n", temp);
+            return -1;
+        }
+        while (*p) {
+            if (!isdigit(*p)) {
+                printf("Error: Invalid character in '%s'\n", temp);
+                return -1;
+            }
+            p++;
+        }
+
+        count++;
+
+        /* Move to next token if any*/
+        ptr = *end ? end + 1 : end;
+    }
+
+    return count;
+}
+
+int count_registers(const char* line)
+{
+	int i, count = 0;
+	if(strstr(line,".data") != NULL || strstr(line,".string"))
+		return 3;
+	for(;i<strlen(instruction_list);i++)
+	{
+		if(strstr(line,instruciton_list[i][0]) != NULL)
+			return instruction_list[i][1];
+	}
+
+	return -1;
+}
